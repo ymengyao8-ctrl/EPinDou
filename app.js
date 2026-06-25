@@ -652,13 +652,14 @@ function renderPattern() {
   const { width, height, unit } = state.board;
   const cell = chooseCellSize(width, height);
   const margin = els.showCoords.checked ? 34 : 18;
-  const legendWidth = 260;
+  const rows = sortedCountRows();
   const titleHeight = 64;
   const legendGap = 20;
   const gridW = width * cell;
   const gridH = height * cell;
-  const canvasWidth = margin * 2 + gridW + legendGap + legendWidth;
-  const canvasHeight = Math.max(titleHeight + margin * 2 + gridH, 620);
+  const legend = legendLayout(rows.length, gridH);
+  const canvasWidth = margin * 2 + gridW + legendGap + legend.width;
+  const canvasHeight = Math.max(titleHeight + margin * 2 + gridH, titleHeight + margin * 2 + legend.height, 620);
   const gridX = margin;
   const gridY = titleHeight + margin;
   const focus = els.focusColor.value;
@@ -673,7 +674,7 @@ function renderPattern() {
   drawCells(gridX, gridY, cell, focus);
   if (els.showGrid.checked) drawGrid(gridX, gridY, cell, width, height, unit);
   if (els.showCoords.checked) drawCoords(gridX, gridY, cell, width, height);
-  drawLegend(gridX + gridW + legendGap, titleHeight + margin, legendWidth);
+  drawLegend(gridX + gridW + legendGap, titleHeight + margin, legend, rows);
 }
 
 function chooseCellSize(width, height) {
@@ -779,12 +780,31 @@ function drawCoords(gridX, gridY, cell, width, height) {
   }
 }
 
-function drawLegend(x, y, width) {
+function legendLayout(rowCount, gridHeight) {
+  const rowHeight = 28;
+  const headerHeight = 44;
+  const footerPadding = 10;
+  const minRowsPerColumn = 18;
+  const rowsPerColumn = Math.max(minRowsPerColumn, Math.floor((Math.max(gridHeight, 560) - headerHeight - footerPadding) / rowHeight));
+  const columns = Math.max(1, Math.ceil(rowCount / rowsPerColumn));
+  const rowsInTallestColumn = Math.min(rowCount || 1, rowsPerColumn);
+  const columnWidth = 220;
+  return {
+    columnWidth,
+    columns,
+    rowsPerColumn,
+    rowHeight,
+    width: columns * columnWidth + 18,
+    height: headerHeight + rowsInTallestColumn * rowHeight + footerPadding,
+  };
+}
+
+function drawLegend(x, y, legend, rows) {
   ctx.fillStyle = "#f7f8fa";
   ctx.strokeStyle = "#30343b";
   ctx.lineWidth = 1;
-  ctx.fillRect(x, y, width, Math.min(560, state.counts.size * 28 + 54));
-  ctx.strokeRect(x, y, width, Math.min(560, state.counts.size * 28 + 54));
+  ctx.fillRect(x, y, legend.width, legend.height);
+  ctx.strokeRect(x, y, legend.width, legend.height);
 
   ctx.fillStyle = "#151922";
   ctx.font = "800 16px system-ui, sans-serif";
@@ -792,19 +812,21 @@ function drawLegend(x, y, width) {
   ctx.textBaseline = "top";
   ctx.fillText("色号用量", x + 14, y + 12);
 
-  const rows = sortedCountRows().slice(0, 18);
   rows.forEach((row, index) => {
-    const top = y + 44 + index * 28;
+    const column = Math.floor(index / legend.rowsPerColumn);
+    const rowInColumn = index % legend.rowsPerColumn;
+    const left = x + 14 + column * legend.columnWidth;
+    const top = y + 44 + rowInColumn * legend.rowHeight;
     ctx.fillStyle = row.hex;
-    ctx.fillRect(x + 14, top, 18, 18);
+    ctx.fillRect(left, top, 18, 18);
     ctx.strokeStyle = "#5f6875";
-    ctx.strokeRect(x + 14, top, 18, 18);
+    ctx.strokeRect(left, top, 18, 18);
     ctx.fillStyle = "#151922";
     ctx.font = "700 12px Arial, sans-serif";
-    ctx.fillText(row.code, x + 42, top + 1);
+    ctx.fillText(row.code, left + 28, top + 1);
     ctx.fillStyle = "#596271";
     ctx.font = "600 12px Arial, sans-serif";
-    ctx.fillText(`${row.count} 颗`, x + width - 72, top + 1);
+    ctx.fillText(`${row.count} 颗`, left + legend.columnWidth - 78, top + 1);
   });
 }
 
