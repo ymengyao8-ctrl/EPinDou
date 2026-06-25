@@ -1025,13 +1025,87 @@ function totalBeads() {
   return [...state.counts.values()].reduce((sum, count) => sum + count, 0);
 }
 
-function downloadPattern() {
+async function downloadPattern() {
   if (!state.image) return;
 
-  const link = document.createElement("a");
-  link.download = `bead-pattern-${state.board.width}x${state.board.height}.png`;
-  link.href = els.canvas.toDataURL("image/png");
-  link.click();
+  await downloadCanvas(els.canvas, `bead-pattern-${state.board.width}x${state.board.height}.png`);
+  await downloadCanvas(createLegendCanvas(), `bead-legend-${state.board.width}x${state.board.height}.png`);
+}
+
+function createLegendCanvas() {
+  const rows = sortedCountRows();
+  const rowHeight = 32;
+  const columnWidth = 230;
+  const maxRowsPerColumn = 36;
+  const columns = Math.max(1, Math.ceil(rows.length / maxRowsPerColumn));
+  const rowsPerColumn = Math.ceil(rows.length / columns);
+  const margin = 28;
+  const titleHeight = 72;
+  const width = margin * 2 + columns * columnWidth;
+  const height = margin * 2 + titleHeight + rowsPerColumn * rowHeight + 16;
+  const canvas = document.createElement("canvas");
+  const context = canvas.getContext("2d");
+  canvas.width = width;
+  canvas.height = height;
+
+  context.fillStyle = "#ffffff";
+  context.fillRect(0, 0, width, height);
+  context.fillStyle = "#151922";
+  context.font = "800 30px system-ui, sans-serif";
+  context.textAlign = "left";
+  context.textBaseline = "top";
+  context.fillText("拼豆色号用量", margin, margin);
+  context.fillStyle = "#66707e";
+  context.font = "700 14px system-ui, sans-serif";
+  context.fillText(`${state.board.width}x${state.board.height} · ${rows.length} 色 · 共 ${totalBeads()} 颗`, margin, margin + 42);
+
+  rows.forEach((row, index) => {
+    const column = Math.floor(index / rowsPerColumn);
+    const rowInColumn = index % rowsPerColumn;
+    const left = margin + column * columnWidth;
+    const top = margin + titleHeight + rowInColumn * rowHeight;
+
+    context.fillStyle = row.hex;
+    context.fillRect(left, top + 3, 22, 22);
+    context.strokeStyle = "#68717f";
+    context.lineWidth = 1;
+    context.strokeRect(left, top + 3, 22, 22);
+    context.fillStyle = "#151922";
+    context.font = "800 15px Arial, sans-serif";
+    context.fillText(row.code, left + 32, top + 4);
+    context.fillStyle = "#596271";
+    context.font = "700 14px Arial, sans-serif";
+    context.textAlign = "right";
+    context.fillText(`${row.count} 颗`, left + columnWidth - 20, top + 5);
+    context.textAlign = "left";
+  });
+
+  context.strokeStyle = "#aeb5bf";
+  context.lineWidth = 1;
+  context.strokeRect(10, 10, width - 20, height - 20);
+  return canvas;
+}
+
+function downloadCanvas(canvas, filename) {
+  return new Promise((resolve) => {
+    canvas.toBlob((blob) => {
+      if (!blob) {
+        resolve();
+        return;
+      }
+      const link = document.createElement("a");
+      const url = URL.createObjectURL(blob);
+      link.download = filename;
+      link.href = url;
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+      setTimeout(() => {
+        URL.revokeObjectURL(url);
+        resolve();
+      }, 120);
+    }, "image/png");
+  });
 }
 
 function line(x1, y1, x2, y2) {
