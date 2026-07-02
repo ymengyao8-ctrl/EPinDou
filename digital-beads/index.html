@@ -4,7 +4,7 @@
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>电子拼豆</title>
-    <link rel="stylesheet" href="./styles.css?v=4" />
+    <link rel="stylesheet" href="./styles.css?v=5" />
   </head>
   <body>
     <main class="studio-shell">
@@ -25,6 +25,8 @@
 
         <div class="top-actions">
           <a id="patternEntryLink" class="pattern-entry-link" href="../">选择 / 更换图纸</a>
+          <button id="saveProgressButton" type="button">保存进度</button>
+          <button id="finishButton" class="finish-button" type="button" disabled>确认拼完</button>
           <button id="helpButton" type="button">操作说明</button>
           <button id="undoButton" type="button" disabled>撤回本次</button>
           <button id="resetButton" class="danger" type="button">清空豆板</button>
@@ -115,6 +117,51 @@
       </section>
     </main>
 
+    <section id="finishingStage" class="finishing-stage hidden" aria-label="熨烫与保存作品">
+      <header class="finish-header">
+        <div>
+          <p class="step-label">FINISHING STUDIO</p>
+          <h2 id="finishTitle">给拼豆通电熨烫</h2>
+        </div>
+        <div class="finish-header-actions">
+          <div class="finish-progress-copy"><span id="finishStep">01 · 插上电源</span><strong id="ironProgressText">0%</strong></div>
+          <button id="closeFinishButton" type="button">稍后继续</button>
+        </div>
+      </header>
+
+      <div id="finishRoom" class="finish-room">
+        <div class="finish-board">
+          <div id="finishedPiece" class="finished-piece">
+            <canvas id="finishCanvas" aria-label="待熨烫拼豆作品"></canvas>
+            <span id="peelHint" class="peel-hint">熨烫完成后，从这里拖动撕下</span>
+          </div>
+        </div>
+
+        <div id="powerSocket" class="power-socket" aria-label="电源插座"><i></i><i></i><span>220V</span></div>
+        <svg class="cord-layer" aria-hidden="true"><path id="cordPath"></path></svg>
+
+        <div id="electricIron" class="electric-iron" aria-label="电熨斗">
+          <div class="iron-body"><span class="iron-light"></span><span class="iron-vent"></span></div>
+          <div class="iron-handle"></div>
+          <button id="ironKnob" class="iron-knob" type="button" aria-label="旋转熨斗开关"><i></i></button>
+          <span class="iron-label">EPinDou</span>
+        </div>
+
+        <div id="powerPlug" class="power-plug" role="button" tabindex="0" aria-label="电熨斗插头"><i></i><i></i><span>拖到插座</span></div>
+
+        <div class="finish-instruction" id="finishInstruction">
+          <strong>先把插头拖进右上角插座</strong>
+          <span>插好以后，点击熨斗旋钮通电。</span>
+        </div>
+      </div>
+
+      <footer class="finish-footer">
+        <div class="iron-progress-track"><i id="ironProgressBar"></i></div>
+        <p id="finishStatus">电熨斗尚未通电</p>
+        <button id="saveWorkButton" class="save-work-button hidden" type="button">保存为作品 PNG</button>
+      </footer>
+    </section>
+
     <div id="helpDialog" class="dialog-backdrop hidden" role="dialog" aria-modal="true" aria-labelledby="helpTitle">
       <section class="help-card">
         <button id="closeHelp" class="close-button" type="button" aria-label="关闭">×</button>
@@ -135,6 +182,6 @@
     <div id="boardTooltip" class="board-tooltip" role="tooltip" aria-hidden="true"></div>
 
     <script src="../palettes.js?v=15"></script>
-    <script defer src="./app.js?v=4"></script>
+    <script defer src="./app.js?v=5"></script>
   </body>
 </html>

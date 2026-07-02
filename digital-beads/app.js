@@ -4,6 +4,8 @@ const els = {
   progressBar: document.querySelector("#progressBar"),
   patternEntryBack: document.querySelector("#patternEntryBack"),
   patternEntryLink: document.querySelector("#patternEntryLink"),
+  saveProgressButton: document.querySelector("#saveProgressButton"),
+  finishButton: document.querySelector("#finishButton"),
   boardCanvas: document.querySelector("#boardCanvas"),
   boardViewport: document.querySelector("#boardViewport"),
   boardTooltip: document.querySelector("#boardTooltip"),
@@ -33,10 +35,29 @@ const els = {
   resetButton: document.querySelector("#resetButton"),
   toast: document.querySelector("#toast"),
   workbench: document.querySelector("#workbench"),
+  finishingStage: document.querySelector("#finishingStage"),
+  finishTitle: document.querySelector("#finishTitle"),
+  finishStep: document.querySelector("#finishStep"),
+  ironProgressText: document.querySelector("#ironProgressText"),
+  closeFinishButton: document.querySelector("#closeFinishButton"),
+  finishRoom: document.querySelector("#finishRoom"),
+  finishCanvas: document.querySelector("#finishCanvas"),
+  finishedPiece: document.querySelector("#finishedPiece"),
+  peelHint: document.querySelector("#peelHint"),
+  powerSocket: document.querySelector("#powerSocket"),
+  cordPath: document.querySelector("#cordPath"),
+  electricIron: document.querySelector("#electricIron"),
+  ironKnob: document.querySelector("#ironKnob"),
+  powerPlug: document.querySelector("#powerPlug"),
+  finishInstruction: document.querySelector("#finishInstruction"),
+  ironProgressBar: document.querySelector("#ironProgressBar"),
+  finishStatus: document.querySelector("#finishStatus"),
+  saveWorkButton: document.querySelector("#saveWorkButton"),
 };
 
 const boardCtx = els.boardCanvas.getContext("2d");
 const trayCtx = els.trayCanvas.getContext("2d");
+const finishCtx = els.finishCanvas.getContext("2d");
 const TRAY_ROWS = 10;
 const TRAY_COLS = 14;
 const NEEDLE_CAPACITY = 14;
@@ -69,13 +90,31 @@ const state = {
   },
   feedTimer: null,
   toastTimer: null,
+  finish: {
+    visible: false,
+    plugged: false,
+    ironOn: false,
+    complete: false,
+    peeled: false,
+    coverage: new Set(),
+    plugDrag: null,
+    ironDrag: null,
+    peelDrag: null,
+    plugX: 0,
+    plugY: 0,
+    ironX: 0,
+    ironY: 0,
+  },
 };
 
 init();
 
 function init() {
   if (!state.pattern) return;
-  state.placed = Array(state.pattern.width * state.pattern.height).fill(null);
+  state.placed = loadSavedProgress();
+  if (isLocalFinishTest()) {
+    state.placed = state.pattern.cells.map((cell) => cell ? { code: cell.code, hex: cell.hex } : null);
+  }
   state.palette = paletteForPattern();
   state.usedCounts = countPatternColors();
   els.patternName.textContent = `${state.pattern.paletteName || "MARD 色卡"} · ${state.pattern.width} × ${state.pattern.height}`;
@@ -87,6 +126,11 @@ function init() {
   updateProgress();
   scheduleNeedleHome();
   if (state.pattern.isDemo) els.helpDialog.classList.remove("hidden");
+}
+
+function isLocalFinishTest() {
+  const localHost = ["127.0.0.1", "localhost"].includes(window.location.hostname);
+  return localHost && new URLSearchParams(window.location.search).get("testFinish") === "1";
 }
 
 function bindEvents() {
@@ -123,6 +167,15 @@ function bindEvents() {
   window.addEventListener("mouseup", handleGlobalUp);
   els.workbench.addEventListener("contextmenu", (event) => event.preventDefault());
   els.helpButton.addEventListener("click", () => els.helpDialog.classList.remove("hidden"));
+  els.saveProgressButton.addEventListener("click", () => saveProgress(true));
+  els.finishButton.addEventListener("click", openFinishingStage);
+  els.closeFinishButton.addEventListener("click", closeFinishingStage);
+  els.ironKnob.addEventListener("mousedown", (event) => event.stopPropagation());
+  els.ironKnob.addEventListener("click", toggleIronPower);
+  els.powerPlug.addEventListener("mousedown", startPlugDrag);
+  els.electricIron.addEventListener("mousedown", startIronDrag);
+  els.finishedPiece.addEventListener("mousedown", startPeelDrag);
+  els.saveWorkButton.addEventListener("click", saveFinishedWork);
   els.closeHelp.addEventListener("click", closeHelp);
   els.startPlaying.addEventListener("click", closeHelp);
   els.helpDialog.addEventListener("mousedown", (event) => {
@@ -159,6 +212,30 @@ function patternEntryUrl() {
     return "/PinDou/";
   }
   return "../";
+}
+
+function progressStorageKey() {
+  return `epindouProgress:${state.pattern.createdAt || `${state.pattern.width}x${state.pattern.height}`}`;
+}
+
+function loadSavedProgress() {
+  const empty = Array(state.pattern.width * state.pattern.height).fill(null);
+  try {
+    const saved = JSON.parse(localStorage.getItem(progressStorageKey()) || "null");
+    if (!Array.isArray(saved?.placed) || saved.placed.length !== empty.length) return empty;
+    return saved.placed.map((bead) => bead?.code && bead?.hex ? { code: bead.code, hex: bead.hex } : null);
+  } catch (error) {
+    console.warn("拼豆进度读取失败", error);
+    return empty;
+  }
+}
+
+function saveProgress(notify = false) {
+  localStorage.setItem(progressStorageKey(), JSON.stringify({
+    placed: state.placed,
+    savedAt: new Date().toISOString(),
+  }));
+  if (notify) showToast("当前拼豆进度已保存");
 }
 
 function createDemoPattern() {
@@ -839,6 +916,7 @@ function resetBoard() {
   state.placed.fill(null);
   state.undoStack = [];
   state.currentTransaction = [];
+  localStorage.removeItem(progressStorageKey());
   els.undoButton.disabled = true;
   drawBoard();
   updateProgress();
@@ -853,16 +931,380 @@ function updateProgress() {
   });
   els.progressText.textContent = `${correct} / ${total}`;
   els.progressBar.style.width = `${total ? correct / total * 100 : 0}%`;
+  const remaining = Math.max(0, total - correct);
+  els.finishButton.disabled = remaining > 0;
+  els.finishButton.textContent = remaining ? `还差 ${remaining} 颗` : "确认拼完";
   if (correct === total && total > 0) showToast("图纸完成！每一颗都放对了 ✦");
 }
 
+function boardCompletion() {
+  let correct = 0;
+  let total = 0;
+  state.pattern.cells.forEach((target, index) => {
+    if (!target) return;
+    total += 1;
+    if (state.placed[index]?.code === target.code) correct += 1;
+  });
+  return { correct, total, complete: total > 0 && correct === total };
+}
+
+function openFinishingStage() {
+  const completion = boardCompletion();
+  if (!completion.complete) {
+    showToast(`还差 ${completion.total - completion.correct} 颗正确豆子，拼完才能熨烫`);
+    return;
+  }
+  saveProgress(false);
+  resetFinishingState();
+  state.finish.visible = true;
+  els.finishingStage.classList.remove("hidden");
+  drawFinishPiece();
+  requestAnimationFrame(positionFinishTools);
+}
+
+function closeFinishingStage() {
+  state.finish.visible = false;
+  state.finish.plugDrag = null;
+  state.finish.ironDrag = null;
+  state.finish.peelDrag = null;
+  els.finishingStage.classList.add("hidden");
+}
+
+function resetFinishingState() {
+  Object.assign(state.finish, {
+    plugged: false,
+    ironOn: false,
+    complete: false,
+    peeled: false,
+    plugDrag: null,
+    ironDrag: null,
+    peelDrag: null,
+  });
+  state.finish.coverage = new Set();
+  els.powerPlug.classList.remove("connected");
+  els.powerSocket.classList.remove("connected");
+  els.electricIron.classList.remove("on");
+  els.finishedPiece.classList.remove("peel-ready", "detached");
+  els.finishedPiece.style.transform = "";
+  els.saveWorkButton.classList.add("hidden");
+  els.saveWorkButton.textContent = "保存为作品 PNG";
+  els.finishTitle.textContent = "给拼豆通电熨烫";
+  els.finishStep.textContent = "01 · 插上电源";
+  els.ironProgressText.textContent = "0%";
+  els.ironProgressBar.style.width = "0%";
+  els.finishStatus.textContent = "电熨斗尚未通电";
+  els.finishInstruction.innerHTML = "<strong>先把插头拖进右上角插座</strong><span>插好以后，点击熨斗旋钮通电。</span>";
+}
+
+function positionFinishTools() {
+  if (!state.finish.visible) return;
+  const room = els.finishRoom.getBoundingClientRect();
+  state.finish.ironX = clamp(room.width - 335, 20, room.width - 196);
+  state.finish.ironY = clamp(room.height - 225, 90, room.height - 148);
+  state.finish.plugX = clamp(room.width - 205, 20, room.width - 90);
+  state.finish.plugY = clamp(room.height - 115, 80, room.height - 65);
+  setIronPosition(state.finish.ironX, state.finish.ironY);
+  setPlugPosition(state.finish.plugX, state.finish.plugY);
+  updateCord();
+}
+
+function drawFinishPiece() {
+  const { width, height } = state.pattern;
+  const cell = clamp(Math.floor(560 / Math.max(width, height)), 6, 16);
+  state.finish.cell = cell;
+  els.finishCanvas.width = width * cell;
+  els.finishCanvas.height = height * cell;
+  finishCtx.clearRect(0, 0, els.finishCanvas.width, els.finishCanvas.height);
+
+  state.placed.forEach((bead, index) => {
+    if (!bead) return;
+    const x = (index % width) * cell;
+    const y = Math.floor(index / width) * cell;
+    const fused = state.finish.coverage.has(index);
+    finishCtx.fillStyle = bead.hex;
+    finishCtx.strokeStyle = darken(bead.hex, 24);
+    finishCtx.lineWidth = Math.max(.6, cell * .055);
+    if (fused) {
+      roundRect(finishCtx, x + cell * .01, y + cell * .01, cell * .98, cell * .98, cell * .32);
+      finishCtx.fill();
+      finishCtx.stroke();
+      finishCtx.fillStyle = "rgba(255,255,255,.3)";
+      finishCtx.beginPath();
+      finishCtx.arc(x + cell / 2, y + cell / 2, cell * .09, 0, Math.PI * 2);
+      finishCtx.fill();
+    } else {
+      const cx = x + cell / 2;
+      const cy = y + cell / 2;
+      finishCtx.beginPath();
+      finishCtx.arc(cx, cy, cell * .42, 0, Math.PI * 2);
+      finishCtx.fill();
+      finishCtx.stroke();
+      finishCtx.fillStyle = "rgba(246,248,245,.8)";
+      finishCtx.beginPath();
+      finishCtx.arc(cx, cy, cell * .14, 0, Math.PI * 2);
+      finishCtx.fill();
+    }
+  });
+}
+
+function startPlugDrag(event) {
+  if (event.button !== 0 || state.finish.plugged) return;
+  event.preventDefault();
+  const rect = els.powerPlug.getBoundingClientRect();
+  state.finish.plugDrag = { offsetX: event.clientX - rect.left, offsetY: event.clientY - rect.top };
+}
+
+function movePlug(event) {
+  const room = els.finishRoom.getBoundingClientRect();
+  const drag = state.finish.plugDrag;
+  setPlugPosition(event.clientX - room.left - drag.offsetX, event.clientY - room.top - drag.offsetY);
+  updateCord();
+}
+
+function setPlugPosition(x, y) {
+  const room = els.finishRoom.getBoundingClientRect();
+  state.finish.plugX = clamp(x, 6, Math.max(6, room.width - 90));
+  state.finish.plugY = clamp(y, 6, Math.max(6, room.height - 56));
+  els.powerPlug.style.left = `${state.finish.plugX}px`;
+  els.powerPlug.style.top = `${state.finish.plugY}px`;
+}
+
+function finishPlugDrag() {
+  if (!state.finish.plugDrag) return;
+  state.finish.plugDrag = null;
+  const plug = els.powerPlug.getBoundingClientRect();
+  const socket = expandedRect(els.powerSocket.getBoundingClientRect(), 34);
+  const plugTipX = plug.right + 12;
+  const plugTipY = plug.top + plug.height / 2;
+  if (!pointInRect(plugTipX, plugTipY, socket)) {
+    els.finishStatus.textContent = "插头没有插准，再拖到插座孔位试试";
+    return;
+  }
+  state.finish.plugged = true;
+  els.powerPlug.classList.add("connected");
+  els.powerSocket.classList.add("connected");
+  els.finishStep.textContent = "02 · 旋转开关";
+  els.finishStatus.textContent = "电源已接通，点击熨斗上的圆形旋钮";
+  els.finishInstruction.innerHTML = "<strong>插头已接好</strong><span>点击熨斗圆形旋钮，把开关转到开启位置。</span>";
+  updateCord();
+}
+
+function updateCord() {
+  if (!state.finish.visible) return;
+  const room = els.finishRoom.getBoundingClientRect();
+  const startX = state.finish.ironX + 155;
+  const startY = state.finish.ironY + 104;
+  let endX = state.finish.plugX + 10;
+  let endY = state.finish.plugY + 24;
+  if (state.finish.plugged) {
+    const socket = els.powerSocket.getBoundingClientRect();
+    endX = socket.left - room.left + socket.width / 2;
+    endY = socket.top - room.top + socket.height / 2;
+  }
+  const middleX = (startX + endX) / 2;
+  const sag = Math.min(room.height - 18, Math.max(startY, endY) + 100);
+  els.cordPath.setAttribute("d", `M ${startX} ${startY} C ${middleX} ${sag}, ${middleX} ${sag}, ${endX} ${endY}`);
+}
+
+function toggleIronPower() {
+  if (!state.finish.plugged) {
+    els.finishStatus.textContent = "先把插头拖进插座，旋钮现在没有电";
+    return;
+  }
+  if (state.finish.complete) return;
+  state.finish.ironOn = !state.finish.ironOn;
+  els.electricIron.classList.toggle("on", state.finish.ironOn);
+  if (state.finish.ironOn) {
+    els.finishStep.textContent = "03 · 拖动熨烫";
+    els.finishStatus.textContent = "熨斗已加热，按住熨斗在作品上来回移动";
+    els.finishInstruction.innerHTML = "<strong>开始熨烫</strong><span>拖动熨斗覆盖整张作品，进度达到 100% 即完成。</span>";
+  } else {
+    els.finishStatus.textContent = "熨斗已关闭，再点旋钮可继续熨烫";
+  }
+}
+
+function startIronDrag(event) {
+  if (event.button !== 0 || event.target.closest("#ironKnob")) return;
+  event.preventDefault();
+  const rect = els.electricIron.getBoundingClientRect();
+  state.finish.ironDrag = { offsetX: event.clientX - rect.left, offsetY: event.clientY - rect.top };
+}
+
+function moveIron(event) {
+  const room = els.finishRoom.getBoundingClientRect();
+  const drag = state.finish.ironDrag;
+  setIronPosition(event.clientX - room.left - drag.offsetX, event.clientY - room.top - drag.offsetY);
+  updateCord();
+  if (state.finish.ironOn && !state.finish.complete) applyIronCoverage();
+}
+
+function setIronPosition(x, y) {
+  const room = els.finishRoom.getBoundingClientRect();
+  state.finish.ironX = clamp(x, 0, Math.max(0, room.width - 176));
+  state.finish.ironY = clamp(y, 0, Math.max(0, room.height - 128));
+  els.electricIron.style.left = `${state.finish.ironX}px`;
+  els.electricIron.style.top = `${state.finish.ironY}px`;
+}
+
+function applyIronCoverage() {
+  const canvas = els.finishCanvas.getBoundingClientRect();
+  const iron = els.electricIron.getBoundingClientRect();
+  const plate = { left: iron.left + 8, right: iron.right - 6, top: iron.top + 52, bottom: iron.bottom };
+  const overlap = {
+    left: Math.max(canvas.left, plate.left),
+    right: Math.min(canvas.right, plate.right),
+    top: Math.max(canvas.top, plate.top),
+    bottom: Math.min(canvas.bottom, plate.bottom),
+  };
+  if (overlap.left >= overlap.right || overlap.top >= overlap.bottom) return;
+  const { width, height } = state.pattern;
+  const startCol = clamp(Math.floor((overlap.left - canvas.left) / canvas.width * width), 0, width - 1);
+  const endCol = clamp(Math.ceil((overlap.right - canvas.left) / canvas.width * width), 0, width - 1);
+  const startRow = clamp(Math.floor((overlap.top - canvas.top) / canvas.height * height), 0, height - 1);
+  const endRow = clamp(Math.ceil((overlap.bottom - canvas.top) / canvas.height * height), 0, height - 1);
+  for (let row = startRow; row <= endRow; row += 1) {
+    for (let col = startCol; col <= endCol; col += 1) {
+      const index = row * width + col;
+      if (state.pattern.cells[index]) state.finish.coverage.add(index);
+    }
+  }
+  drawFinishPiece();
+  updateIronProgress();
+}
+
+function updateIronProgress() {
+  const total = [...state.usedCounts.values()].reduce((sum, count) => sum + count, 0);
+  const percent = total ? Math.min(100, Math.round(state.finish.coverage.size / total * 100)) : 0;
+  els.ironProgressText.textContent = `${percent}%`;
+  els.ironProgressBar.style.width = `${percent}%`;
+  els.finishStatus.textContent = `正在熨烫 · 已覆盖 ${percent}%`;
+  if (percent >= 100) completeIroning();
+}
+
+function completeIroning() {
+  state.finish.complete = true;
+  state.finish.ironOn = false;
+  els.electricIron.classList.remove("on");
+  els.finishedPiece.classList.add("peel-ready");
+  els.finishTitle.textContent = "熨烫完成";
+  els.finishStep.textContent = "04 · 撕下作品";
+  els.finishStatus.textContent = "熨烫完成！按住作品向外拖动，把它从板上撕下来";
+  els.finishInstruction.innerHTML = "<strong>熨烫完成</strong><span>按住作品本身向上或向旁边拖动，距离足够就会从板上揭下。</span>";
+}
+
+function startPeelDrag(event) {
+  if (event.button !== 0 || !state.finish.complete || state.finish.peeled) return;
+  event.preventDefault();
+  state.finish.peelDrag = { startX: event.clientX, startY: event.clientY, dx: 0, dy: 0 };
+}
+
+function movePeel(event) {
+  const drag = state.finish.peelDrag;
+  drag.dx = event.clientX - drag.startX;
+  drag.dy = event.clientY - drag.startY;
+  const lift = Math.hypot(drag.dx, drag.dy);
+  els.finishedPiece.style.transform = `translate(${drag.dx}px, ${drag.dy}px) rotate(${clamp(drag.dx / 22, -9, 9)}deg) scale(${1 + Math.min(.06, lift / 1800)})`;
+  els.finishStatus.textContent = lift > 110 ? "松开鼠标，作品就会从豆板上揭下" : "继续向外拖，把作品完整揭下";
+}
+
+function finishPeelDrag() {
+  const drag = state.finish.peelDrag;
+  if (!drag) return;
+  state.finish.peelDrag = null;
+  if (Math.hypot(drag.dx, drag.dy) < 110) {
+    els.finishedPiece.style.transform = "";
+    els.finishStatus.textContent = "拖动距离还不够，再试一次";
+    return;
+  }
+  state.finish.peeled = true;
+  els.finishedPiece.classList.remove("peel-ready");
+  els.finishedPiece.classList.add("detached");
+  els.finishedPiece.style.transform = `translate(${clamp(drag.dx, -90, 90)}px, ${clamp(drag.dy, -70, 35)}px) rotate(${clamp(drag.dx / 24, -6, 6)}deg)`;
+  els.finishStep.textContent = "05 · 保存作品";
+  els.finishStatus.textContent = "作品已经完整撕下，可以保存为透明背景 PNG";
+  els.finishInstruction.innerHTML = "<strong>作品完成</strong><span>点击下方“保存为作品 PNG”，同时会收进本机作品记录。</span>";
+  els.saveWorkButton.classList.remove("hidden");
+}
+
+function createFinishedWorkCanvas() {
+  const { width, height } = state.pattern;
+  const occupied = state.placed.map((bead, index) => bead ? index : -1).filter((index) => index >= 0);
+  const cols = occupied.map((index) => index % width);
+  const rows = occupied.map((index) => Math.floor(index / width));
+  const minCol = Math.min(...cols);
+  const maxCol = Math.max(...cols);
+  const minRow = Math.min(...rows);
+  const maxRow = Math.max(...rows);
+  const cell = 22;
+  const padding = 28;
+  const canvas = document.createElement("canvas");
+  canvas.width = (maxCol - minCol + 1) * cell + padding * 2;
+  canvas.height = (maxRow - minRow + 1) * cell + padding * 2;
+  const context = canvas.getContext("2d");
+  state.placed.forEach((bead, index) => {
+    if (!bead) return;
+    const col = index % width;
+    const row = Math.floor(index / width);
+    const x = padding + (col - minCol) * cell;
+    const y = padding + (row - minRow) * cell;
+    context.fillStyle = bead.hex;
+    context.strokeStyle = darken(bead.hex, 22);
+    context.lineWidth = 1.2;
+    roundRect(context, x, y, cell, cell, 7);
+    context.fill();
+    context.stroke();
+    context.fillStyle = "rgba(255,255,255,.3)";
+    context.beginPath();
+    context.arc(x + cell / 2, y + cell / 2, 2.2, 0, Math.PI * 2);
+    context.fill();
+  });
+  return canvas;
+}
+
+function saveFinishedWork() {
+  if (!state.finish.peeled) return;
+  const canvas = createFinishedWorkCanvas();
+  const dataUrl = canvas.toDataURL("image/png");
+  const work = {
+    id: Date.now(),
+    name: `EPinDou-${state.pattern.width}x${state.pattern.height}`,
+    image: dataUrl,
+    createdAt: new Date().toISOString(),
+  };
+  try {
+    const works = JSON.parse(localStorage.getItem("epindouWorks") || "[]");
+    localStorage.setItem("epindouWorks", JSON.stringify([work, ...works].slice(0, 6)));
+  } catch (error) {
+    console.warn("本机作品记录保存失败", error);
+  }
+  const link = document.createElement("a");
+  link.href = dataUrl;
+  link.download = `${work.name}-${String(work.id).slice(-6)}.png`;
+  link.click();
+  els.saveWorkButton.textContent = "作品已保存 ✓";
+  els.finishStatus.textContent = "作品已保存到下载目录，也已收进本机作品记录";
+}
+
 function handleGlobalMove(event) {
+  if (state.finish.visible) {
+    if (state.finish.plugDrag) return movePlug(event);
+    if (state.finish.ironDrag) return moveIron(event);
+    if (state.finish.peelDrag) return movePeel(event);
+  }
   if (state.jarDrag) return handleJarMove(event);
   if (state.trayShake) return handleTrayMove(event);
   if (state.needle.dragging) handleNeedleMove(event);
 }
 
 function handleGlobalUp(event) {
+  if (state.finish.visible && event.button === 0) {
+    if (state.finish.plugDrag) return finishPlugDrag();
+    if (state.finish.ironDrag) {
+      state.finish.ironDrag = null;
+      return;
+    }
+    if (state.finish.peelDrag) return finishPeelDrag();
+  }
   if (event.button === 2 && state.needle.dragging) {
     event.preventDefault();
     releaseNeedleClamp();

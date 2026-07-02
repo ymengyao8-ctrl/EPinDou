@@ -103,6 +103,62 @@ h2 {
   flex-wrap: wrap;
 }
 
+.demo-picker {
+  display: flex;
+  align-items: center;
+  gap: 18px;
+  margin: 0 0 14px;
+  padding: 12px 14px;
+  border: 1px solid rgba(35, 47, 42, 0.1);
+  border-radius: 14px;
+  background: rgba(255, 255, 255, 0.72);
+}
+
+.demo-picker-copy {
+  min-width: 135px;
+}
+
+.demo-picker-copy h2 {
+  margin: 2px 0 0;
+  font-size: 15px;
+}
+
+.demo-pattern-list {
+  display: flex;
+  gap: 9px;
+  overflow-x: auto;
+  padding: 2px;
+}
+
+.demo-pattern {
+  width: 82px;
+  flex: 0 0 82px;
+  padding: 6px 6px 5px;
+  border: 1px solid rgba(42, 63, 53, 0.13);
+  border-radius: 11px;
+  background: #fbfaf6;
+  text-align: center;
+}
+
+.demo-pattern:hover {
+  border-color: rgba(31, 111, 92, 0.45);
+  background: #f2f8f4;
+}
+
+.demo-pattern img {
+  display: block;
+  width: 58px;
+  height: 58px;
+  margin: 0 auto 3px;
+  image-rendering: pixelated;
+}
+
+.demo-pattern span {
+  color: #48544f;
+  font-size: 11px;
+  font-weight: 800;
+}
+
 .use-pattern-button {
   background: #1f6f5c;
   border-color: #1f6f5c;

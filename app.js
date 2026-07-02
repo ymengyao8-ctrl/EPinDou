@@ -2,6 +2,7 @@ const els = {
   input: document.querySelector("#imageInput"),
   download: document.querySelector("#downloadButton"),
   usePattern: document.querySelector("#usePatternButton"),
+  demoPatternList: document.querySelector("#demoPatternList"),
   canvas: document.querySelector("#patternCanvas"),
   empty: document.querySelector("#emptyState"),
   paletteSelect: document.querySelector("#paletteSelect"),
@@ -69,6 +70,7 @@ const TRANSPARENT_BEAD = {
 init();
 
 function init() {
+  renderDemoPatterns();
   populatePaletteSelect();
   updateLabels();
   bindEvents();
@@ -79,6 +81,7 @@ function init() {
 
 function bindEvents() {
   els.input.addEventListener("change", handleImageUpload);
+  els.demoPatternList.addEventListener("click", handleDemoPatternClick);
   els.download.addEventListener("click", downloadPattern);
   els.usePattern.addEventListener("click", usePatternInDigitalStudio);
   els.paletteSelect.addEventListener("change", () => {
@@ -160,19 +163,104 @@ function handleImageUpload(event) {
 
   const reader = new FileReader();
   reader.onload = () => {
-    const image = new Image();
-    image.onload = () => {
-      state.image = image;
-      state.replacements.clear();
-      setDefaultCutoutRect();
-      els.empty.style.display = "none";
-      els.canvas.style.display = "block";
-      renderCutoutPreview();
-      buildAndRender();
-    };
-    image.src = reader.result;
+    loadSourceImage(reader.result);
   };
   reader.readAsDataURL(file);
+}
+
+function renderDemoPatterns() {
+  const demos = [
+    ["tree", "小树"],
+    ["house", "小房子"],
+    ["flower", "小花"],
+    ["heart", "爱心"],
+  ];
+  els.demoPatternList.innerHTML = demos.map(([key, label]) => {
+    const source = makeDemoPattern(key);
+    return `<button class="demo-pattern" type="button" data-demo="${key}"><img src="${source}" alt="${label}图纸" /><span>${label}</span></button>`;
+  }).join("");
+}
+
+function handleDemoPatternClick(event) {
+  const button = event.target.closest("button[data-demo]");
+  if (!button) return;
+  els.boardPreset.value = "29x29:29";
+  els.fitMode.value = "contain";
+  els.detailLevel.value = "photo";
+  els.enableCutout.checked = false;
+  loadSourceImage(makeDemoPattern(button.dataset.demo));
+}
+
+function loadSourceImage(source) {
+  const image = new Image();
+  image.onload = () => {
+    state.image = image;
+    state.replacements.clear();
+    setDefaultCutoutRect();
+    els.empty.style.display = "none";
+    els.canvas.style.display = "block";
+    renderCutoutPreview();
+    buildAndRender();
+  };
+  image.src = source;
+}
+
+function makeDemoPattern(kind) {
+  const size = 29;
+  const cells = Array(size * size).fill("");
+  const set = (x, y, color) => {
+    if (x >= 0 && y >= 0 && x < size && y < size) cells[y * size + x] = color;
+  };
+  const fill = (x, y, width, height, color) => {
+    for (let yy = y; yy < y + height; yy += 1) {
+      for (let xx = x; xx < x + width; xx += 1) set(xx, yy, color);
+    }
+  };
+
+  if (kind === "tree") {
+    for (let y = 4; y <= 19; y += 1) {
+      const half = Math.min(9, Math.floor((y - 2) / 2));
+      for (let x = 14 - half; x <= 14 + half; x += 1) set(x, y, y < 11 ? "#57B86B" : "#268A4A");
+    }
+    fill(12, 19, 5, 7, "#8A5739");
+    fill(5, 26, 19, 2, "#82C95D");
+    set(10, 9, "#F6D44A"); set(18, 13, "#F06A58"); set(13, 16, "#9B67C8");
+  } else if (kind === "house") {
+    for (let y = 5; y <= 13; y += 1) {
+      const half = y - 4;
+      for (let x = 14 - half; x <= 14 + half; x += 1) set(x, y, "#D95F4F");
+    }
+    fill(6, 14, 17, 12, "#F2C26B");
+    fill(12, 19, 5, 7, "#7E513C");
+    fill(8, 17, 3, 4, "#72B9D6"); fill(18, 17, 3, 4, "#72B9D6");
+    fill(4, 26, 21, 2, "#73B957");
+  } else if (kind === "flower") {
+    fill(13, 14, 3, 12, "#4EAD62");
+    for (const [x, y] of [[14,7],[9,11],[19,11],[10,17],[18,17]]) {
+      for (let yy = -3; yy <= 3; yy += 1) {
+        for (let xx = -3; xx <= 3; xx += 1) if (xx * xx + yy * yy <= 9) set(x + xx, y + yy, "#EE7FA5");
+      }
+    }
+    for (let yy = -3; yy <= 3; yy += 1) {
+      for (let xx = -3; xx <= 3; xx += 1) if (xx * xx + yy * yy <= 10) set(14 + xx, 13 + yy, "#F2C94C");
+    }
+    fill(5, 26, 19, 2, "#73B957");
+  } else {
+    for (let y = 5; y <= 23; y += 1) {
+      for (let x = 4; x <= 24; x += 1) {
+        const nx = (x - 14) / 9;
+        const ny = (y - 13) / 8;
+        if ((nx * nx + ny * ny - 1) ** 3 - nx * nx * ny ** 3 <= 0) set(x, y, y < 11 ? "#F58FA6" : "#E74861");
+      }
+    }
+    set(11, 10, "#FFD7DF"); set(12, 10, "#FFD7DF");
+  }
+
+  const rects = cells.map((color, index) => color
+    ? `<rect x="${index % size}" y="${Math.floor(index / size)}" width="1" height="1" fill="${color}"/>`
+    : "").join("");
+  const svg = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${size} ${size}" shape-rendering="crispEdges">${rects}</svg>`;
+  return `data:image/svg+xml;charset=utf-8,${encodeURIComponent(svg)}`;
 }
 
 function loadDemoImageIfNeeded() {

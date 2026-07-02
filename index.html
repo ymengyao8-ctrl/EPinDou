@@ -4,7 +4,7 @@
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>拼豆图纸生成器</title>
-    <link rel="stylesheet" href="./styles.css?v=15" />
+    <link rel="stylesheet" href="./styles.css?v=18" />
   </head>
   <body>
     <main class="app-shell">
@@ -23,6 +23,14 @@
             <button id="downloadButton" type="button">下载图纸+图例 PNG</button>
           </div>
         </header>
+
+        <section class="demo-picker" aria-labelledby="demoPickerTitle">
+          <div class="demo-picker-copy">
+            <p class="eyebrow">Quick Start</p>
+            <h2 id="demoPickerTitle">先用简单图纸试试</h2>
+          </div>
+          <div id="demoPatternList" class="demo-pattern-list" aria-label="Demo 图纸列表"></div>
+        </section>
 
         <div class="canvas-panel">
           <div id="emptyState" class="empty-state">
@@ -174,6 +182,6 @@
     </main>
 
     <script defer src="./palettes.js?v=15"></script>
-    <script defer src="./app.js?v=16"></script>
+    <script defer src="./app.js?v=18"></script>
   </body>
 </html>

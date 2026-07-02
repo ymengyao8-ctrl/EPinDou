@@ -71,6 +71,7 @@ button:disabled { cursor: not-allowed; opacity: .4; }
 .pattern-entry-link { border: 1px solid rgba(40,107,87,.22); border-radius: 10px; color: var(--green); background: rgba(236,246,240,.84); text-decoration: none; }
 .pattern-entry-link:hover { border-color: rgba(40,107,87,.5); background: rgba(226,241,232,.96); }
 .top-actions .danger { color: #a64e3f; }
+.top-actions .finish-button:not(:disabled) { color: white; border-color: var(--orange); background: var(--orange); }
 
 .workbench {
   position: relative;
@@ -258,7 +259,7 @@ button:disabled { cursor: not-allowed; opacity: .4; }
 .close-button { position: absolute; top: 16px; right: 16px; width: 34px; height: 34px; border: 0; background: transparent; font-size: 24px; }
 .primary { width: 100%; padding: 12px; color: white; border-color: var(--green); background: var(--green); font-weight: 800; }
 
-.toast { position: fixed; z-index: 220; left: 50%; bottom: 28px; max-width: 460px; padding: 11px 17px; border-radius: 12px; color: white; background: rgba(30,44,38,.92); box-shadow: 0 12px 32px rgba(25,31,28,.22); font-size: 12px; font-weight: 700; pointer-events: none; opacity: 0; transform: translate(-50%, 12px); transition: opacity .2s, transform .2s; }
+.toast { position: fixed; z-index: 420; left: 50%; bottom: 28px; max-width: 460px; padding: 11px 17px; border-radius: 12px; color: white; background: rgba(30,44,38,.92); box-shadow: 0 12px 32px rgba(25,31,28,.22); font-size: 12px; font-weight: 700; pointer-events: none; opacity: 0; transform: translate(-50%, 12px); transition: opacity .2s, transform .2s; }
 .toast.show { opacity: 1; transform: translate(-50%, 0); }
 .toast.error { background: rgba(151,67,48,.94); }
 
@@ -285,6 +286,143 @@ button:disabled { cursor: not-allowed; opacity: .4; }
 .board-tooltip i { grid-row: 1 / 3; width: 28px; height: 28px; border: 1px solid rgba(38,48,43,.25); border-radius: 50%; background: var(--tooltip-color); box-shadow: inset 0 2px rgba(255,255,255,.35); }
 .board-tooltip strong { font-size: 15px; line-height: 1.1; }
 .board-tooltip span { color: var(--muted); font-size: 10px; }
+
+.finishing-stage {
+  position: fixed;
+  z-index: 300;
+  inset: 0;
+  display: grid;
+  grid-template-rows: 78px 1fr 76px;
+  color: var(--ink);
+  background:
+    radial-gradient(circle at 28% 35%, rgba(255,255,255,.92), transparent 34%),
+    linear-gradient(145deg, #ebe7de, #f8f5ed 55%, #e4e0d5);
+  user-select: none;
+}
+.finishing-stage.hidden { display: none; }
+
+.finish-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 24px;
+  padding: 0 26px;
+  border-bottom: 1px solid rgba(43,58,50,.12);
+  background: rgba(251,249,243,.82);
+  backdrop-filter: blur(16px);
+}
+.finish-header h2 { margin: 2px 0 0; font-family: Georgia, "Songti SC", serif; font-size: 23px; }
+.finish-header-actions { display: flex; align-items: center; gap: 18px; }
+.finish-header-actions button { padding: 9px 14px; font-size: 12px; font-weight: 800; }
+.finish-progress-copy { min-width: 170px; display: grid; grid-template-columns: 1fr auto; gap: 8px; color: var(--muted); font-size: 11px; font-weight: 800; }
+.finish-progress-copy strong { color: var(--green-dark); font-size: 15px; }
+
+.finish-room { position: relative; min-height: 0; overflow: hidden; }
+.finish-board {
+  position: absolute;
+  left: 5%;
+  top: 6%;
+  width: min(62vw, 760px);
+  height: 86%;
+  display: grid;
+  place-items: center;
+  overflow: hidden;
+  border: 12px solid #d8d8d1;
+  border-radius: 28px;
+  background:
+    linear-gradient(45deg, rgba(74,85,79,.035) 25%, transparent 25%, transparent 75%, rgba(74,85,79,.035) 75%),
+    linear-gradient(45deg, rgba(74,85,79,.035) 25%, transparent 25%, transparent 75%, rgba(74,85,79,.035) 75%),
+    #f8faf7;
+  background-position: 0 0, 12px 12px;
+  background-size: 24px 24px;
+  box-shadow: inset 0 0 0 2px rgba(49,64,56,.14), 0 18px 50px rgba(63,58,47,.15);
+}
+.finish-board::before { content: "IRONING BOARD"; position: absolute; left: 18px; top: 14px; color: rgba(47,66,56,.27); font-size: 9px; font-weight: 900; letter-spacing: .18em; }
+.finished-piece { position: relative; cursor: default; transform-origin: 18% 85%; transition: filter .25s, transform .3s ease; }
+.finished-piece canvas { display: block; max-width: 54vw; max-height: 64vh; filter: drop-shadow(0 8px 12px rgba(37,45,40,.16)); }
+.finished-piece.peel-ready { cursor: grab; }
+.finished-piece.peel-ready:active { cursor: grabbing; }
+.finished-piece.detached { filter: drop-shadow(0 22px 24px rgba(36,43,39,.24)); }
+.peel-hint { position: absolute; left: 50%; bottom: -34px; width: max-content; padding: 7px 11px; border-radius: 10px; color: white; background: rgba(37,62,50,.82); font-size: 10px; font-weight: 800; opacity: 0; transform: translateX(-50%); transition: opacity .2s; }
+.finished-piece.peel-ready .peel-hint { opacity: 1; }
+
+.power-socket {
+  position: absolute;
+  right: 6%;
+  top: 7%;
+  width: 84px;
+  height: 84px;
+  border: 7px solid #e1dfd7;
+  border-radius: 22px;
+  background: #fbfaf6;
+  box-shadow: inset 0 0 0 1px rgba(43,54,48,.16), 0 9px 20px rgba(55,50,42,.13);
+}
+.power-socket i { position: absolute; top: 26px; width: 9px; height: 22px; border-radius: 5px; background: #4f5652; }
+.power-socket i:first-child { left: 22px; }
+.power-socket i:nth-child(2) { right: 22px; }
+.power-socket span { position: absolute; inset: auto 0 7px; color: #8a8e8b; font-size: 8px; font-weight: 900; text-align: center; }
+.power-socket.connected { box-shadow: inset 0 0 0 1px rgba(43,54,48,.16), 0 0 0 5px rgba(51,132,94,.17), 0 9px 20px rgba(55,50,42,.13); }
+
+.cord-layer { position: absolute; z-index: 1; inset: 0; width: 100%; height: 100%; pointer-events: none; }
+.cord-layer path { fill: none; stroke: #303633; stroke-width: 6; stroke-linecap: round; filter: drop-shadow(0 2px 1px rgba(255,255,255,.7)); }
+
+.electric-iron {
+  position: absolute;
+  z-index: 5;
+  width: 176px;
+  height: 128px;
+  cursor: grab;
+  touch-action: none;
+}
+.electric-iron:active { cursor: grabbing; }
+.iron-body { position: absolute; left: 10px; bottom: 0; width: 160px; height: 80px; clip-path: polygon(0 76%, 9% 26%, 77% 9%, 100% 63%, 94% 100%, 8% 100%); background: linear-gradient(160deg, #f1ad72, #d56f45 62%, #b84d35); box-shadow: inset 0 -9px rgba(121,50,36,.16); }
+.iron-body::after { content: ""; position: absolute; left: 7px; right: 7px; bottom: 0; height: 10px; background: #aeb5b1; }
+.iron-handle { position: absolute; left: 54px; top: 5px; width: 82px; height: 55px; border: 14px solid #315f52; border-bottom-width: 10px; border-radius: 28px 28px 13px 13px; }
+.iron-knob { position: absolute; z-index: 2; left: 69px; top: 56px; width: 38px; height: 38px; padding: 0; border: 4px solid #f5d0ad; border-radius: 50%; background: #7c4938; transition: transform .35s ease; }
+.iron-knob i { position: absolute; left: 15px; top: 2px; width: 3px; height: 11px; border-radius: 2px; background: #fff1d9; }
+.electric-iron.on .iron-knob { transform: rotate(135deg); }
+.iron-light { position: absolute; z-index: 2; right: 30px; top: 27px; width: 10px; height: 10px; border-radius: 50%; background: #7b2924; }
+.electric-iron.on .iron-light { background: #ffe16a; box-shadow: 0 0 13px #ffb23f; }
+.iron-vent { position: absolute; left: 30px; top: 35px; width: 55px; height: 5px; border-radius: 5px; background: repeating-linear-gradient(90deg, rgba(91,43,32,.38) 0 4px, transparent 4px 9px); }
+.iron-label { position: absolute; left: 95px; bottom: 24px; color: rgba(255,255,255,.72); font-size: 9px; font-weight: 900; transform: rotate(-5deg); }
+
+.power-plug {
+  position: absolute;
+  z-index: 6;
+  width: 68px;
+  height: 48px;
+  border-radius: 12px 22px 22px 12px;
+  color: white;
+  background: linear-gradient(90deg, #303a35, #56605b);
+  box-shadow: inset 4px 0 rgba(255,255,255,.08), 0 7px 14px rgba(39,43,40,.2);
+  cursor: grab;
+  touch-action: none;
+}
+.power-plug:active { cursor: grabbing; }
+.power-plug i { position: absolute; right: -17px; width: 22px; height: 4px; border-radius: 3px; background: #aeb5b1; }
+.power-plug i:first-child { top: 13px; }
+.power-plug i:nth-child(2) { bottom: 13px; }
+.power-plug span { position: absolute; inset: 16px 0 auto; font-size: 8px; font-weight: 900; text-align: center; }
+.power-plug.connected { opacity: 0; pointer-events: none; }
+
+.finish-instruction { position: absolute; right: 4%; bottom: 8%; width: 250px; padding: 15px 17px; border: 1px solid rgba(46,69,57,.14); border-radius: 14px; background: rgba(255,253,248,.88); box-shadow: 0 12px 30px rgba(63,58,47,.1); }
+.finish-instruction strong, .finish-instruction span { display: block; }
+.finish-instruction strong { margin-bottom: 5px; font-family: Georgia, "Songti SC", serif; font-size: 15px; }
+.finish-instruction span { color: var(--muted); font-size: 11px; line-height: 1.5; }
+
+.finish-footer { display: grid; grid-template-columns: minmax(240px, 1fr) auto auto; align-items: center; gap: 18px; padding: 0 26px; border-top: 1px solid rgba(43,58,50,.12); background: rgba(251,249,243,.88); }
+.iron-progress-track { height: 8px; overflow: hidden; border-radius: 8px; background: rgba(46,61,53,.1); }
+.iron-progress-track i { display: block; width: 0; height: 100%; border-radius: inherit; background: linear-gradient(90deg, #de8250, #f2c15f); transition: width .2s; }
+.finish-footer p { min-width: 170px; margin: 0; color: var(--muted); font-size: 12px; font-weight: 800; }
+.save-work-button { padding: 11px 18px; color: white; border-color: var(--green); background: var(--green); font-weight: 900; }
+.save-work-button.hidden { display: none; }
+
+@media (max-width: 980px) {
+  .finish-board { left: 3%; width: 70vw; }
+  .power-socket { right: 3%; }
+  .finish-instruction { display: none; }
+  .finished-piece canvas { max-width: 62vw; }
+}
 
 @media (max-width: 1180px) {
   body { overflow: auto; }
