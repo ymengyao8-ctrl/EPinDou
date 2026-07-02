@@ -2,6 +2,8 @@ const els = {
   patternName: document.querySelector("#patternName"),
   progressText: document.querySelector("#progressText"),
   progressBar: document.querySelector("#progressBar"),
+  patternEntryBack: document.querySelector("#patternEntryBack"),
+  patternEntryLink: document.querySelector("#patternEntryLink"),
   boardCanvas: document.querySelector("#boardCanvas"),
   boardViewport: document.querySelector("#boardViewport"),
   shadowOpacity: document.querySelector("#shadowOpacity"),
@@ -59,6 +61,7 @@ const state = {
     lastCellAt: 0,
     overflowed: false,
     hasMoved: false,
+    pickupNoticeAt: 0,
   },
   feedTimer: null,
   toastTimer: null,
@@ -67,6 +70,7 @@ const state = {
 init();
 
 function init() {
+  if (!state.pattern) return;
   state.placed = Array(state.pattern.width * state.pattern.height).fill(null);
   state.palette = paletteForPattern();
   state.usedCounts = countPatternColors();
@@ -82,6 +86,9 @@ function init() {
 }
 
 function bindEvents() {
+  const entryUrl = patternEntryUrl();
+  els.patternEntryBack.href = entryUrl;
+  els.patternEntryLink.href = entryUrl;
   window.addEventListener("resize", () => {
     resizeBoard();
     if (!state.needle.dragging && !state.needle.hasMoved) positionNeedleHome();
@@ -121,13 +128,26 @@ function bindEvents() {
 }
 
 function loadPattern() {
+  const params = new URLSearchParams(window.location.search);
+  if (params.get("practice") === "1") return createDemoPattern();
   try {
     const saved = JSON.parse(localStorage.getItem("digitalBeadPattern") || "null");
-    if (saved?.width && saved?.height && Array.isArray(saved.cells)) return saved;
+    const readyToken = sessionStorage.getItem("epindouPatternReady");
+    if (saved?.width && saved?.height && Array.isArray(saved.cells) && readyToken === saved.createdAt) {
+      return saved;
+    }
   } catch (error) {
-    console.warn("图纸读取失败，改用练习图纸", error);
+    console.warn("图纸读取失败，返回图纸生成器", error);
   }
-  return createDemoPattern();
+  window.location.replace(patternEntryUrl());
+  return null;
+}
+
+function patternEntryUrl() {
+  if (window.location.hostname === "ymengyao8-ctrl.github.io") {
+    return "/PinDou/";
+  }
+  return "../";
 }
 
 function createDemoPattern() {
@@ -576,38 +596,36 @@ function needleTip() {
 function pickUpTrayBeads() {
   const tip = needleTip();
   const rect = els.trayCanvas.getBoundingClientRect();
-  if (!pointInRect(tip.x, tip.y, expandedRect(rect, 26))) return;
+  if (!pointInRect(tip.x, tip.y, expandedRect(rect, 18))) return;
   const scaleY = els.trayCanvas.height / rect.height;
   const trayY = (tip.y - rect.top) * scaleY;
-  const preferredRow = clamp(Math.round((trayY - 49) / 17.2), 0, TRAY_ROWS - 1);
-  const rowOrder = [...Array(TRAY_ROWS).keys()].sort((a, b) => Math.abs(a - preferredRow) - Math.abs(b - preferredRow));
-  const row = rowOrder.find((candidate) => state.trayBeads.some((bead) => bead.aligned && bead.row === candidate));
-  if (row === undefined) {
-    showToast("先把散豆左右摇进凹槽，再用双针取豆");
+  const rowPosition = (trayY - traySlotY(0)) / 17.2;
+  const row = Math.round(rowPosition);
+  if (row < 0 || row >= TRAY_ROWS || Math.abs(rowPosition - row) > 0.48) {
+    showPickupNotice("针尖要对准某一条凹槽的中心");
     return;
   }
   const rowBeads = state.trayBeads.filter((bead) => bead.aligned && bead.row === row).sort((a, b) => a.col - b.col);
-  const code = rowBeads[0].code;
-  const picked = rowBeads.filter((bead) => bead.code === code).slice(0, NEEDLE_CAPACITY);
+  if (!rowBeads.length) {
+    showPickupNotice(`第 ${row + 1} 道已经空了，请重新摇铲让散豆入槽`);
+    return;
+  }
+  const picked = rowBeads.slice(0, NEEDLE_CAPACITY);
   const pickedSet = new Set(picked);
   state.trayBeads = state.trayBeads.filter((bead) => !pickedSet.has(bead));
   state.needle.load = picked.map((bead) => ({ code: bead.code, hex: bead.hex }));
-  compactTraySlots();
   updateTrayCount();
   drawTray();
   renderNeedleLoad();
-  showToast(`夹起 ${picked.length} 颗 ${code}，按住右键可防止滑落`);
+  const codes = [...new Set(picked.map((bead) => bead.code))].join(" / ");
+  showToast(`第 ${row + 1} 道有 ${picked.length} 颗，已全部夹起（${codes}）`);
 }
 
-function compactTraySlots() {
-  const aligned = state.trayBeads.filter((bead) => bead.aligned);
-  aligned.sort((a, b) => a.row - b.row || a.col - b.col);
-  aligned.forEach((bead, index) => {
-    bead.row = Math.floor(index / TRAY_COLS);
-    bead.col = index % TRAY_COLS;
-    bead.x = traySlotX(bead.col);
-    bead.y = traySlotY(bead.row);
-  });
+function showPickupNotice(message) {
+  const now = performance.now();
+  if (now - state.needle.pickupNoticeAt < 700) return;
+  state.needle.pickupNoticeAt = now;
+  showToast(message);
 }
 
 function renderNeedleLoad() {

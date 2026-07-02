@@ -67,7 +67,9 @@ button:disabled { cursor: not-allowed; opacity: .4; }
 .progress-track i { display: block; width: 0; height: 100%; border-radius: inherit; background: linear-gradient(90deg, #2f7b63, #79b687); transition: width .25s ease; }
 
 .top-actions { display: flex; justify-content: flex-end; gap: 8px; }
-.top-actions button { padding: 9px 13px; font-size: 12px; font-weight: 700; }
+.top-actions button, .pattern-entry-link { padding: 9px 13px; font-size: 12px; font-weight: 700; }
+.pattern-entry-link { border: 1px solid rgba(40,107,87,.22); border-radius: 10px; color: var(--green); background: rgba(236,246,240,.84); text-decoration: none; }
+.pattern-entry-link:hover { border-color: rgba(40,107,87,.5); background: rgba(226,241,232,.96); }
 .top-actions .danger { color: #a64e3f; }
 
 .workbench {

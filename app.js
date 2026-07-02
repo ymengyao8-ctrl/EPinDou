@@ -207,6 +207,7 @@ function buildAndRender() {
 
 function usePatternInDigitalStudio() {
   if (!state.cells.length) return;
+  const confirmedAt = new Date().toISOString();
   const pattern = {
     version: 1,
     width: state.board.width,
@@ -218,10 +219,18 @@ function usePatternInDigitalStudio() {
       const bead = finalBeadForCell(cell);
       return bead ? { code: bead.code, hex: bead.hex } : null;
     }),
-    createdAt: new Date().toISOString(),
+    createdAt: confirmedAt,
   };
   localStorage.setItem("digitalBeadPattern", JSON.stringify(pattern));
-  window.location.href = "./digital-beads/";
+  sessionStorage.setItem("epindouPatternReady", confirmedAt);
+  window.location.href = digitalStudioUrl();
+}
+
+function digitalStudioUrl() {
+  if (window.location.hostname === "ymengyao8-ctrl.github.io") {
+    return "/EPinDou/digital-beads/";
+  }
+  return "./digital-beads/";
 }
 
 function updateLabels() {
